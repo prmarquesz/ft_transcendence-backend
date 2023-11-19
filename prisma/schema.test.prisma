@@ -1,0 +1,186 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_TEST_URL")
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+  IN_GAME
+}
+
+enum MatchType {
+  ONE_VS_ONE
+  TWO_VS_TWO
+}
+
+enum MatchResult {
+  WIN
+  LOSS
+}
+
+model User {
+  id                  Int               @id @default(autoincrement())
+  login               String            @unique
+  nickname            String            @unique
+  avatarUrl           String
+  createdAt           DateTime          @default(now())
+  tfaEnabled          Boolean           @default(false)
+  tfaSecret           String?
+  status              UserStatus        @default(OFFLINE)
+  statsId             Int?              @unique
+  stats               UserStats?        @relation(fields: [statsId], references: [id])
+  matches             MatchHistory[]    @relation("UserMatches")
+  opponents           MatchHistory[]    @relation("OpponentMatches")
+  sentInvitations     GameInvitation[]  @relation("InvitationsSent")
+  receivedInvitations GameInvitation[]  @relation("InvitationsReceived")
+  sentMessages        Message[]         @relation(name: "SentMessages")
+  receivedMessages    Message[]         @relation(name: "ReceivedMessages")
+  friends             Friendship[]      @relation("UserFriends")
+  friendOf            Friendship[]      @relation("FriendUsers")
+  blockedUsers        BlockedUser[]     @relation("Blocker")
+  blockingUsers       BlockedUser[]     @relation("Blocked")
+  ownedChannels       Channel[]         @relation("ChannelOwner")
+  channels            Channel[]         @relation("ChannelMembers")
+  roles               UserChannelRole[]
+  notifications       Notification[]
+
+  @@map("users")
+}
+
+model Friendship {
+  userId   Int
+  friendId Int
+  user     User @relation("UserFriends", fields: [userId], references: [id])
+  friend   User @relation("FriendUsers", fields: [friendId], references: [id])
+
+  @@id([userId, friendId])
+  @@map("friendships")
+}
+
+model BlockedUser {
+  blocker   User @relation("Blocker", fields: [blockerId], references: [id])
+  blocked   User @relation("Blocked", fields: [blockedId], references: [id])
+  blockerId Int
+  blockedId Int
+
+  @@id([blockerId, blockedId])
+  @@map("blocked_users")
+}
+
+model UserStats {
+  id           Int           @id @default(autoincrement())
+  wins         Int           @default(0)
+  losses       Int           @default(0)
+  ladderLevel  Int           @default(0)
+  achievements Achievement[]
+  userId       Int?          @unique
+  user         User?
+
+  @@map("user_stats")
+}
+
+model Achievement {
+  id          Int       @id @default(autoincrement())
+  name        String
+  stats       UserStats @relation(fields: [userStatsId], references: [id])
+  userStatsId Int
+}
+
+model MatchHistory {
+  id         Int         @id @default(autoincrement())
+  user       User        @relation("UserMatches", fields: [userId], references: [id])
+  userId     Int
+  matchType  MatchType
+  opponentId Int
+  opponent   User        @relation("OpponentMatches", fields: [opponentId], references: [id])
+  result     MatchResult
+  date       DateTime    @default(now())
+}
+
+model GameInvitation {
+  id        Int      @id @default(autoincrement())
+  inviter   User     @relation("InvitationsSent", fields: [inviterId], references: [id])
+  inviterId Int
+  invitee   User     @relation("InvitationsReceived", fields: [inviteeId], references: [id])
+  inviteeId Int
+  status    String
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  type      String
+  message   String
+  relatedId Int
+  createdAt DateTime @default(now())
+  read      Boolean  @default(false)
+}
+
+model Message {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation("SentMessages", fields: [userId], references: [id])
+  receiver   User?    @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  channel    Channel? @relation(fields: [channelId], references: [id])
+  content    String
+  createdAt  DateTime @default(now())
+  userId     Int
+  receiverId Int?
+  channelId  Int?
+
+  @@map("messages")
+}
+
+enum RoleName {
+  OWNER
+  ADMIN
+  REGULAR
+}
+
+enum Permission {
+  KICK
+  BAN
+  MUTE
+}
+
+model ChannelRole {
+  id          Int               @id @default(autoincrement())
+  name        RoleName
+  permissions Permission[]
+  users       UserChannelRole[]
+}
+
+model UserChannelRole {
+  user      User        @relation(fields: [userId], references: [id])
+  channel   Channel     @relation(fields: [channelId], references: [id])
+  role      ChannelRole @relation(fields: [roleId], references: [id])
+  userId    Int
+  channelId Int
+  roleId    Int
+  createdAt DateTime    @default(now())
+
+  @@id([userId, channelId])
+}
+
+model Channel {
+  id       Int               @id @default(autoincrement())
+  name     String            @unique
+  isPublic Boolean           @default(true)
+  password String?
+  owner    User              @relation("ChannelOwner", fields: [ownerId], references: [id])
+  ownerId  Int
+  messages Message[]
+  members  User[]            @relation("ChannelMembers")
+  roles    UserChannelRole[]
+
+  @@map("channels")
+}
